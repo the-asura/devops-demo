@@ -1,0 +1,40 @@
+# Release: pushing a tag like v1.2.0 packages the build, creates a GitHub Release and announces it.
+# Tags are the only thing allowed to become a "版本号"; the tag must point at a commit on main.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Tag must be on main
+        run: git branch -r --contains "$GITHUB_SHA" | grep -q 'origin/main' || { echo "tag is not on main"; exit 1; }
+      - name: Tag must match package.json version
+        run: |
+          v=$(node -pe 'require("./package.json").version'); t="${GITHUB_REF_NAME#v}"
+          [ "$v" = "$t" ] || { echo "package.json=$v but tag=$t"; exit 1; }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm run lint && npm test && npm run build
+      - run: cd dist && zip -r "../devops-demo-${GITHUB_REF_NAME}.zip" .
+      - name: Create GitHub Release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release create "$GITHUB_REF_NAME" "devops-demo-${GITHUB_REF_NAME}.zip" --generate-notes --title "$GITHUB_REF_NAME"
+      - name: Notify Feishu
+        if: always()
+        env:
+          LARK_APP_ID: ${{ secrets.LARK_APP_ID }}
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          LARK_CHAT_ID: ${{ secrets.LARK_CHAT_ID }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then S=success; T="🏷️ 发版 ${GITHUB_REF_NAME}"; else S=failure; T="❌ 发版失败 ${GITHUB_REF_NAME}"; fi
+          scripts/notify.sh "$S" "$T：${{ github.repository }}" "- 提交：\`${GITHUB_SHA:0:7}\`
+          - Release：${{ github.server_url }}/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}
+          - 打包产物：devops-demo-${GITHUB_REF_NAME}.zip"

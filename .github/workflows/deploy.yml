@@ -23,7 +23,6 @@ jobs:
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -45,12 +44,14 @@ jobs:
       - name: Notify Feishu
         if: always()
         env:
+          LARK_APP_ID: ${{ secrets.LARK_APP_ID }}
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          LARK_CHAT_ID: ${{ secrets.LARK_CHAT_ID }}
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
         run: |
-          if [ "${{ job.status }}" = "success" ]; then S=success; T="✅ 已上线：${{ github.repository }}"; else S=failure; T="❌ 上线失败：${{ github.repository }}"; fi
-          node scripts/notify-feishu.mjs "$S" "$T" \
-            "**提交**：\`${GITHUB_SHA:0:7}\` ${{ github.event.head_commit.message || '(manual)' }}
-          **作者**：${{ github.actor }}
-          **地址**：${{ steps.deployment.outputs.page_url }}
-          **流水线**：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "${{ job.status }}" = "success" ]; then S=success; T="✅ 已上线"; else S=failure; T="❌ 上线失败"; fi
+          scripts/notify.sh "$S" "$T：${{ github.repository }}" "- 提交：\`${GITHUB_SHA:0:7}\` ${{ github.event.head_commit.message || '(manual)' }}
+          - 作者：${{ github.actor }}
+          - 地址：${{ steps.deployment.outputs.page_url }}
+          - 流水线：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

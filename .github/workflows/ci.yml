@@ -1,4 +1,4 @@
-# CI: runs on every PR and every push. Nothing merges to main unless this is green.
+# CI: runs on every PR and every non-main push. Nothing merges to main unless this is green.
 name: CI
 on:
   pull_request:
@@ -16,13 +16,17 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: Notify Feishu on failure
-        if: failure()
+      - name: Notify Feishu
+        if: always()
         env:
+          LARK_APP_ID: ${{ secrets.LARK_APP_ID }}
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          LARK_CHAT_ID: ${{ secrets.LARK_CHAT_ID }}
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
         run: |
-          node scripts/notify-feishu.mjs failure "❌ CI 失败：${{ github.repository }}" \
-            "**分支**：${{ github.head_ref || github.ref_name }}
-          **提交**：\`${GITHUB_SHA:0:7}\` by ${{ github.actor }}
-          **详情**：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "${{ job.status }}" = "success" ]; then S=success; T="✅ CI 通过"; else S=failure; T="❌ CI 失败"; fi
+          scripts/notify.sh "$S" "$T：${{ github.repository }}" "- 分支：${{ github.head_ref || github.ref_name }}
+          - 提交：\`${GITHUB_SHA:0:7}\` by ${{ github.actor }}
+          - PR：${{ github.event.pull_request.html_url || '无' }}
+          - 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
